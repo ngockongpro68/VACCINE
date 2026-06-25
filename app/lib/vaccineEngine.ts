@@ -47,6 +47,12 @@ export type DoseAssessment = {
   note: string;
 };
 
+type ValidatedDose = {
+  record: VaccinationRecord;
+  product: VaccineProduct;
+  date: Date;
+};
+
 export type AssessmentResult = {
   ageLabel: string;
   ageDays: number;
@@ -57,6 +63,9 @@ export type AssessmentResult = {
 };
 
 const oneDay = 24 * 60 * 60 * 1000;
+const days = (value: number) => Math.round(value);
+const weeks = (value: number) => days(value * 7);
+const months = (value: number) => Math.round(value * 30.4375);
 
 const dictionary = {
   vi: {
@@ -171,18 +180,103 @@ function recordsForGroup(records: VaccinationRecord[], group: ScheduleGroup) {
   }>;
 }
 
+function hasMixedRotavirusProducts(valid: ValidatedDose[]) {
+  const productIds = new Set(valid.map((entry) => entry.product.id));
+  return productIds.size > 1;
+}
+
+function customRotaDoses(group: ScheduleGroup, records: VaccinationRecord[]): ScheduleDose[] {
+  if (group.id !== "rotavirus") return group.doses;
+
+  const rotaRecords = records
+    .map((record) => ({ record, product: getVaccineProduct(record.productId), date: parseLocalDate(record.date) }))
+    .filter((entry) => entry.product && entry.date && entry.product.groupIds.includes("rotavirus"))
+    .sort((a, b) => Number(a.date) - Number(b.date)) as ValidatedDose[];
+
+  const firstProductId = rotaRecords[0]?.product.id;
+  if (firstProductId === "rotateq") {
+    return [
+      {
+        dose: 1,
+        recommendedDays: group.doses[0]?.recommendedDays ?? 0,
+        minAgeDays: weeks(6),
+        maxAgeDays: weeks(12),
+        label: { vi: "Rota mũi 1", en: "Rotavirus dose 1" },
+      },
+      {
+        dose: 2,
+        recommendedDays: months(3),
+        minAgeDays: weeks(10),
+        minIntervalDays: weeks(4),
+        label: { vi: "Rota mũi 2", en: "Rotavirus dose 2" },
+      },
+      {
+        dose: 3,
+        recommendedDays: months(4),
+        minAgeDays: weeks(14),
+        minIntervalDays: weeks(4),
+        maxAgeDays: weeks(32),
+        label: { vi: "Rota mũi 3", en: "Rotavirus dose 3" },
+      },
+    ];
+  }
+
+  if (firstProductId === "rotarix") {
+    return [
+      {
+        dose: 1,
+        recommendedDays: group.doses[0]?.recommendedDays ?? 0,
+        minAgeDays: weeks(6),
+        maxAgeDays: weeks(24),
+        label: { vi: "Rota mũi 1", en: "Rotavirus dose 1" },
+      },
+      {
+        dose: 2,
+        recommendedDays: months(3),
+        minAgeDays: weeks(10),
+        minIntervalDays: weeks(4),
+        maxAgeDays: weeks(24),
+        label: { vi: "Rota mũi 2", en: "Rotavirus dose 2" },
+      },
+    ];
+  }
+
+  if (firstProductId === "rotavin-m1") {
+    return [
+      {
+        dose: 1,
+        recommendedDays: group.doses[0]?.recommendedDays ?? 0,
+        minAgeDays: weeks(6),
+        maxAgeDays: days(30 * 6 - 1),
+        label: { vi: "Rota mũi 1", en: "Rotavirus dose 1" },
+      },
+      {
+        dose: 2,
+        recommendedDays: months(3),
+        minAgeDays: weeks(10),
+        minIntervalDays: weeks(4),
+        maxAgeDays: days(30 * 6 - 1),
+        label: { vi: "Rota mũi 2", en: "Rotavirus dose 2" },
+      },
+    ];
+  }
+
+  return group.doses;
+}
+
 function validateDoses(
   records: VaccinationRecord[],
   group: ScheduleGroup,
   birthDate: Date,
   gracePeriodDays: number,
 ) {
+  const plannedDoses = customRotaDoses(group, records);
   const matched = recordsForGroup(records, group);
-  const valid: Array<{ record: VaccinationRecord; product: VaccineProduct; date: Date }> = [];
-  const invalid: Array<{ record: VaccinationRecord; product: VaccineProduct; date: Date; reason: string }> = [];
+  const valid: ValidatedDose[] = [];
+  const invalid: Array<ValidatedDose & { reason: string }> = [];
 
   for (const entry of matched) {
-    const expectedDose = group.doses[Math.min(valid.length, group.doses.length - 1)];
+    const expectedDose = plannedDoses[Math.min(valid.length, plannedDoses.length - 1)];
     const ageAtDose = differenceInDays(entry.date, birthDate);
     const minAge = expectedDose?.minAgeDays ?? 0;
     const previousValid = valid.at(-1);
@@ -208,7 +302,7 @@ function validateDoses(
     valid.push(entry);
   }
 
-  return { valid, invalid };
+  return { valid, invalid, plannedDoses };
 }
 
 function nextDoseWindow(
@@ -250,17 +344,24 @@ export function assessVaccines(input: AssessmentInput): AssessmentResult | null 
   ];
 
   const items = profile.groups.map((group): DoseAssessment => {
-    const { valid, invalid } = validateDoses(input.records, group, birth, profile.gracePeriodDays);
-    const nextDose = group.doses[valid.length];
+    const { valid, invalid, plannedDoses } = validateDoses(input.records, group, birth, profile.gracePeriodDays);
+    const nextDose = plannedDoses[valid.length];
+    const mixedRotavirus = group.id === "rotavirus" && hasMixedRotavirusProducts(valid);
 
     if (!nextDose) {
       return {
         groupId: group.id,
         groupName: group.name[language],
-        doseLabel: group.doses.at(-1)?.label[language] ?? group.name[language],
-        status: doctorWarnings.length ? "doctor-review" : "completed",
+        doseLabel: plannedDoses.at(-1)?.label[language] ?? group.name[language],
+        status: doctorWarnings.length || mixedRotavirus ? "doctor-review" : "completed",
         category: group.category,
-        reason: doctorWarnings.length ? text.doctorHealth : text.completed,
+        reason: doctorWarnings.length
+          ? text.doctorHealth
+          : mixedRotavirus
+            ? language === "vi"
+              ? "Đã có đổi sản phẩm rota trong liệu trình, cần bác sĩ rà lại số liều hợp lệ."
+              : "Rotavirus products were mixed in the series, so a clinician should review which doses count."
+            : text.completed,
         validDoseCount: valid.length,
         invalidDoseCount: invalid.length,
         note: group.note[language],
@@ -273,14 +374,20 @@ export function assessVaccines(input: AssessmentInput): AssessmentResult | null 
     const daysFromRecommended = differenceInDays(check, recommendedDate);
     const canCountToday = check >= earliestWithGrace;
 
-    if (doctorWarnings.length || maximumReached) {
+    if (doctorWarnings.length || maximumReached || mixedRotavirus) {
       return {
         groupId: group.id,
         groupName: group.name[language],
         doseLabel: nextDose.label[language],
         status: "doctor-review",
         category: group.category,
-        reason: maximumReached ? text.maxAge : text.doctorHealth,
+        reason: mixedRotavirus
+          ? language === "vi"
+            ? "Đã có đổi sản phẩm rota trong liệu trình, cần bác sĩ rà lại số liều và tuổi tối đa."
+            : "Rotavirus products were mixed in the series, so a clinician should review the counted doses and age limits."
+          : maximumReached
+            ? text.maxAge
+            : text.doctorHealth,
         recommendedDate: formatDate(recommendedDate, language),
         earliestDate: formatDate(earliestDate, language),
         validDoseCount: valid.length,

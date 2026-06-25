@@ -460,6 +460,108 @@ button:focus-visible {
   transform: translateY(-1px);
 }
 
+.date-field {
+  position: relative;
+}
+
+.date-field input:first-child {
+  padding-right: 42px;
+}
+
+.date-picker-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--foreground);
+  display: inline-flex;
+  font-size: 0.95rem;
+  height: 42px;
+  justify-content: center;
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 40px;
+}
+
+.date-native-picker {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 1px;
+}
+
+.vaccine-combobox {
+  position: relative;
+}
+
+.vaccine-combobox input {
+  padding-right: 42px;
+}
+
+.combo-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--foreground);
+  display: inline-flex;
+  font-size: 0.8rem;
+  height: 42px;
+  justify-content: center;
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 40px;
+}
+
+.combo-menu {
+  background: #ffffff;
+  border: 1px solid #cfd6d1;
+  border-radius: 8px;
+  box-shadow: 0 20px 40px rgba(27, 36, 33, 0.16);
+  display: grid;
+  gap: 4px;
+  left: 0;
+  margin-top: 6px;
+  max-height: 420px;
+  max-width: min(920px, calc(100vw - 32px));
+  min-width: 100%;
+  overflow: auto;
+  padding: 8px;
+  position: absolute;
+  top: 100%;
+  z-index: 30;
+}
+
+.combo-option {
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--foreground);
+  display: block;
+  min-height: 40px;
+  line-height: 1.2;
+  padding: 9px 10px;
+  text-align: left;
+  white-space: nowrap;
+  width: max-content;
+  min-width: 100%;
+}
+
+.combo-option:hover,
+.combo-option.active {
+  background: #f7fbf9;
+  border-color: rgba(15, 118, 110, 0.18);
+}
+
+.combo-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 10px;
+}
+
 .secondary-action,
 .icon-action {
   align-items: center;
@@ -484,6 +586,37 @@ button:focus-visible {
   transform: translateY(-1px);
 }
 
+.add-dose-action {
+  justify-self: start;
+  margin-top: -4px;
+}
+
+.primary-action {
+  align-items: center;
+  background: var(--teal-dark);
+  border: 1px solid var(--teal-dark);
+  border-radius: 8px;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 18px;
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.primary-action:hover {
+  box-shadow: 0 14px 26px rgba(7, 71, 68, 0.2);
+  transform: translateY(-1px);
+}
+
+.check-action {
+  width: 100%;
+}
+
 .icon-action {
   background: #fff;
   border-color: #c7bbb5;
@@ -503,6 +636,16 @@ button:focus-visible {
 
 .result-heading h2 {
   margin: 0;
+}
+
+.result-waiting {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #4f5b56;
+  line-height: 1.5;
+  margin: 0 0 16px;
+  padding: 14px;
 }
 
 .profile-pill,
@@ -668,6 +811,126 @@ button:focus-visible {
 
 .warning-box p {
   margin: 8px 0 0;
+}
+
+.today-products {
+  background: #f7fbf9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+}
+
+.today-products-head {
+  display: grid;
+  gap: 6px;
+}
+
+.today-products-head div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.today-products-head span,
+.today-products-review span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.today-products-head strong {
+  color: var(--teal-dark);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.today-products-head p {
+  color: #39433f;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.today-products-review {
+  border-top: 1px solid rgba(191, 199, 194, 0.8);
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.today-vaccine-section {
+  display: grid;
+  gap: 8px;
+}
+
+.today-vaccine-section > span {
+  color: var(--teal-dark);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.today-service-hint {
+  color: #59645f;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: -2px 0 2px;
+}
+
+.today-vaccine-list {
+  display: grid;
+  gap: 8px;
+}
+
+.today-vaccine-item {
+  background: #ffffff;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 8px;
+  color: var(--foreground);
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.today-vaccine-item.review {
+  border-color: rgba(216, 93, 79, 0.24);
+}
+
+.today-vaccine-item.service {
+  border-color: rgba(47, 95, 152, 0.2);
+}
+
+.visit-questions {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 14px;
+}
+
+.visit-questions > span {
+  color: var(--teal-dark);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.visit-questions ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.visit-questions li {
+  color: #39433f;
+  line-height: 1.5;
 }
 
 .switch-result {
