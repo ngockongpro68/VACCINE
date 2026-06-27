@@ -319,7 +319,7 @@ export const vaccineProducts: VaccineProduct[] = [
   {
     id: "menacwy",
     name: "MenACWY",
-    groupIds: ["meningococcal", "menBC"],
+    groupIds: ["meningococcal"],
     antigens: ["MenACWY"],
     countries: ["US", "UK", "AU", "VN"],
     caution: "doctor-review",
@@ -523,7 +523,7 @@ export const vaccineProducts: VaccineProduct[] = [
     name: "VA-MENGOC-BC",
     displayName: { vi: "Mengoc BC (Cuba)", en: "VA-MENGOC-BC" },
     groupIds: ["meningococcal", "menBC"],
-    antigens: ["MenB", "MenBC"],
+    antigens: ["MenBC"],
     countries: ["VN"],
     caution: "doctor-review",
     note: {
@@ -1143,11 +1143,11 @@ export const countryProfiles: CountryProfile[] = [
         category: "routine",
         doses: [
           {
-            dose: 1,
+            dose: 0,
             recommendedDays: 0,
             minAgeDays: 0,
             maxAgeDays: days(28),
-            label: { vi: "Liều sơ sinh", en: "Birth dose" },
+            label: { vi: "Mũi 0 - sơ sinh", en: "Dose 0 - birth dose" },
           },
         ],
         note: {
@@ -1198,6 +1198,52 @@ export const countryProfiles: CountryProfile[] = [
         },
       },
       {
+        id: "polio",
+        name: { vi: "Bại liệt OPV/IPV", en: "Polio OPV/IPV" },
+        requiredAntigens: ["OPV"],
+        category: "routine",
+        doses: [
+          {
+            dose: 1,
+            recommendedDays: months(2),
+            minAgeDays: weeks(6),
+            label: { vi: "bOPV lần 1", en: "bOPV dose 1" },
+          },
+          {
+            dose: 2,
+            recommendedDays: months(3),
+            minAgeDays: weeks(10),
+            minIntervalDays: weeks(4),
+            label: { vi: "bOPV lần 2", en: "bOPV dose 2" },
+          },
+          {
+            dose: 3,
+            recommendedDays: months(4),
+            minAgeDays: weeks(14),
+            minIntervalDays: weeks(4),
+            label: { vi: "bOPV lần 3", en: "bOPV dose 3" },
+          },
+          {
+            dose: 4,
+            recommendedDays: months(5),
+            minAgeDays: months(5),
+            minIntervalDays: weeks(4),
+            label: { vi: "IPV lần 1", en: "IPV dose 1" },
+          },
+          {
+            dose: 5,
+            recommendedDays: months(9),
+            minAgeDays: months(9),
+            minIntervalDays: months(4),
+            label: { vi: "IPV lần 2", en: "IPV dose 2" },
+          },
+        ],
+        note: {
+          vi: "Theo bài HCDC cập nhật ngày 07/11/2025 về vắc xin bại liệt: OPV uống khi trẻ đủ 2, 3, 4 tháng; IPV tiêm khi trẻ đủ 5 và 9 tháng. App dùng nhóm chung OPV/IPV để rà soát lịch cơ bản và cần đối chiếu sổ tiêm khi có lịch tiêm dịch vụ xen kẽ.",
+          en: "Based on the HCDC update published on 7 Nov 2025: OPV is given at 2, 3, and 4 months; IPV is injected at 5 and 9 months. The app uses a combined OPV/IPV review group for basic checking and vaccination cards should still be reviewed when service doses are interleaved.",
+        },
+      },
+      {
         id: "rotavirus",
         name: { vi: "Rota", en: "Rotavirus" },
         requiredAntigens: ["Rotavirus"],
@@ -1241,7 +1287,7 @@ export const countryProfiles: CountryProfile[] = [
       {
         id: "menB",
         name: { vi: "Não mô cầu B", en: "Meningococcal B" },
-        requiredAntigens: ["MenBC"],
+        requiredAntigens: ["MenB"],
         category: "service",
         doses: [
           {

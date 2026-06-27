@@ -66,6 +66,7 @@ const oneDay = 24 * 60 * 60 * 1000;
 const days = (value: number) => Math.round(value);
 const weeks = (value: number) => days(value * 7);
 const months = (value: number) => Math.round(value * 30.4375);
+const years = (value: number) => Math.round(value * 365.25);
 
 const dictionary = {
   vi: {
@@ -144,6 +145,24 @@ export function addDays(base: Date, days: number): Date {
   return next;
 }
 
+function addScheduleDays(base: Date, scheduleDays: number): Date {
+  const yearCount = Math.round(scheduleDays / 365.25);
+  if (yearCount > 0 && years(yearCount) === scheduleDays) {
+    const next = new Date(base);
+    next.setFullYear(base.getFullYear() + yearCount);
+    return next;
+  }
+
+  const monthCount = Math.round(scheduleDays / 30.4375);
+  if (monthCount > 0 && months(monthCount) === scheduleDays) {
+    const next = new Date(base);
+    next.setMonth(base.getMonth() + monthCount);
+    return next;
+  }
+
+  return addDays(base, scheduleDays);
+}
+
 export function differenceInDays(later: Date, earlier: Date): number {
   return Math.floor((startOfDay(later).getTime() - startOfDay(earlier).getTime()) / oneDay);
 }
@@ -170,6 +189,62 @@ function productCoversGroup(product: VaccineProduct, group: ScheduleGroup): bool
 }
 
 function recordsForGroup(records: VaccinationRecord[], group: ScheduleGroup) {
+  if (group.id === "hepbBirth") {
+    return records
+      .map((record) => ({ record, product: getVaccineProduct(record.productId), date: parseLocalDate(record.date) }))
+      .filter(
+        (entry) =>
+          entry.product &&
+          entry.date &&
+          entry.product.groupIds.includes(group.id as VaccineProduct["groupIds"][number]),
+      )
+      .sort((a, b) => Number(a.date) - Number(b.date)) as Array<{
+      record: VaccinationRecord;
+      product: VaccineProduct;
+      date: Date;
+    }>;
+  }
+
+  if (group.id === "polio") {
+    const entries = records
+      .map((record) => ({ record, product: getVaccineProduct(record.productId), date: parseLocalDate(record.date) }))
+      .filter(
+        (entry) =>
+          entry.product &&
+          entry.date &&
+          (entry.product.antigens.includes("OPV") || entry.product.antigens.includes("IPV")),
+      ) as Array<{
+      record: VaccinationRecord;
+      product: VaccineProduct;
+      date: Date;
+    }>;
+
+    const uniqueByDay = new Map<number, (typeof entries)[number]>();
+
+    entries
+      .sort((a, b) => Number(a.date) - Number(b.date))
+      .forEach((entry) => {
+        const key = startOfDay(entry.date).getTime();
+        const previous = uniqueByDay.get(key);
+        if (!previous) {
+          uniqueByDay.set(key, entry);
+          return;
+        }
+
+        const entryIsStandalonePolio = entry.product.groupIds.includes("polio");
+        const previousIsStandalonePolio = previous.product.groupIds.includes("polio");
+        if (entryIsStandalonePolio && !previousIsStandalonePolio) {
+          uniqueByDay.set(key, entry);
+        }
+      });
+
+    return Array.from(uniqueByDay.values()).sort((a, b) => Number(a.date) - Number(b.date)) as Array<{
+      record: VaccinationRecord;
+      product: VaccineProduct;
+      date: Date;
+    }>;
+  }
+
   return records
     .map((record) => ({ record, product: getVaccineProduct(record.productId), date: parseLocalDate(record.date) }))
     .filter((entry) => entry.product && entry.date && productCoversGroup(entry.product, group))
@@ -185,13 +260,38 @@ function hasMixedRotavirusProducts(valid: ValidatedDose[]) {
   return productIds.size > 1;
 }
 
-function customRotaDoses(group: ScheduleGroup, records: VaccinationRecord[]): ScheduleDose[] {
-  if (group.id !== "rotavirus") return group.doses;
-
-  const rotaRecords = records
+function recordsForGroupId(records: VaccinationRecord[], groupId: string) {
+  return records
     .map((record) => ({ record, product: getVaccineProduct(record.productId), date: parseLocalDate(record.date) }))
-    .filter((entry) => entry.product && entry.date && entry.product.groupIds.includes("rotavirus"))
+    .filter((entry) => entry.product && entry.date && entry.product.groupIds.includes(groupId as VaccineProduct["groupIds"][number]))
     .sort((a, b) => Number(a.date) - Number(b.date)) as ValidatedDose[];
+}
+
+function customDose(
+  dose: number,
+  recommendedDays: number,
+  minAgeDays: number,
+  label: ScheduleDose["label"],
+  extras: Partial<Pick<ScheduleDose, "minIntervalDays" | "maxAgeDays">> = {},
+): ScheduleDose {
+  return {
+    dose,
+    recommendedDays,
+    minAgeDays,
+    label,
+    ...extras,
+  };
+}
+
+function customDoses(
+  group: ScheduleGroup,
+  records: VaccinationRecord[],
+  birthDate: Date,
+  checkDate: Date,
+): ScheduleDose[] {
+  if (group.id === "rotavirus") {
+
+  const rotaRecords = recordsForGroupId(records, "rotavirus");
 
   const firstProductId = rotaRecords[0]?.product.id;
   if (firstProductId === "rotateq") {
@@ -261,6 +361,100 @@ function customRotaDoses(group: ScheduleGroup, records: VaccinationRecord[]): Sc
     ];
   }
 
+    return group.doses;
+  }
+
+  if (group.id === "menB") {
+    const menBRecords = recordsForGroupId(records, "menB");
+    const seriesStart = menBRecords[0]?.date ?? checkDate;
+    const startAgeDays = differenceInDays(seriesStart, birthDate);
+
+    if (startAgeDays < months(6)) {
+      return [
+        customDose(1, startAgeDays, months(2), { vi: "Bexsero mũi 1", en: "Bexsero dose 1" }, { maxAgeDays: years(50) }),
+        customDose(2, startAgeDays + months(2), months(4), { vi: "Bexsero mũi 2", en: "Bexsero dose 2" }, { minIntervalDays: months(2), maxAgeDays: years(50) }),
+        customDose(3, startAgeDays + months(10), months(12), { vi: "Bexsero mũi nhắc", en: "Bexsero booster" }, { minIntervalDays: months(8), maxAgeDays: years(50) }),
+      ];
+    }
+
+    if (startAgeDays < months(12)) {
+      return [
+        customDose(1, startAgeDays, months(6), { vi: "Bexsero mũi 1", en: "Bexsero dose 1" }, { maxAgeDays: years(50) }),
+        customDose(2, startAgeDays + months(2), months(8), { vi: "Bexsero mũi 2", en: "Bexsero dose 2" }, { minIntervalDays: months(2), maxAgeDays: years(50) }),
+        customDose(3, startAgeDays + months(6), months(12), { vi: "Bexsero mũi 3", en: "Bexsero dose 3" }, { minIntervalDays: months(4), maxAgeDays: years(50) }),
+      ];
+    }
+
+    if (startAgeDays < months(24)) {
+      return [
+        customDose(1, startAgeDays, months(12), { vi: "Bexsero mũi 1", en: "Bexsero dose 1" }, { maxAgeDays: years(50) }),
+        customDose(2, startAgeDays + months(2), months(14), { vi: "Bexsero mũi 2", en: "Bexsero dose 2" }, { minIntervalDays: months(2), maxAgeDays: years(50) }),
+        customDose(3, startAgeDays + months(14), months(24), { vi: "Bexsero mũi nhắc", en: "Bexsero booster" }, { minIntervalDays: months(12), maxAgeDays: years(50) }),
+      ];
+    }
+
+    return [
+      customDose(1, startAgeDays, startAgeDays, { vi: "Bexsero mũi 1", en: "Bexsero dose 1" }, { maxAgeDays: years(50) }),
+      customDose(2, startAgeDays + months(1), startAgeDays, { vi: "Bexsero mũi 2", en: "Bexsero dose 2" }, { minIntervalDays: weeks(4), maxAgeDays: years(50) }),
+    ];
+  }
+
+  if (group.id === "menBC") {
+    const menBCRecords = recordsForGroupId(records, "menBC");
+    const seriesStart = menBCRecords[0]?.date ?? checkDate;
+    const startAgeDays = differenceInDays(seriesStart, birthDate);
+    return [
+      customDose(1, startAgeDays, months(6), { vi: "Mengoc BC mũi 1", en: "Mengoc BC dose 1" }, { maxAgeDays: years(46) - 1 }),
+      customDose(2, startAgeDays + months(2), months(8), { vi: "Mengoc BC mũi 2", en: "Mengoc BC dose 2" }, { minIntervalDays: weeks(6), maxAgeDays: years(46) - 1 }),
+    ];
+  }
+
+  if (group.id === "menACWY") {
+    const menAcwyRecords = recordsForGroupId(records, "menACWY");
+    const firstProductId = menAcwyRecords[0]?.product.id;
+    const seriesStart = menAcwyRecords[0]?.date ?? checkDate;
+    const startAgeDays = differenceInDays(seriesStart, birthDate);
+
+    if (firstProductId === "menquadfi") {
+      if (startAgeDays < months(6)) {
+        return [
+          customDose(1, startAgeDays, weeks(6), { vi: "MenQuadfi mũi 1", en: "MenQuadfi dose 1" }),
+          customDose(2, startAgeDays + months(2), months(3), { vi: "MenQuadfi mũi 2", en: "MenQuadfi dose 2" }, { minIntervalDays: months(2) }),
+          customDose(3, startAgeDays + months(4), months(5), { vi: "MenQuadfi mũi 3", en: "MenQuadfi dose 3" }, { minIntervalDays: months(2) }),
+          customDose(4, Math.max(months(12), startAgeDays + months(6)), months(12), { vi: "MenQuadfi mũi 4", en: "MenQuadfi dose 4" }, { minIntervalDays: months(2) }),
+        ];
+      }
+
+      if (startAgeDays < months(12)) {
+        return [
+          customDose(1, startAgeDays, months(6), { vi: "MenQuadfi mũi 1", en: "MenQuadfi dose 1" }),
+          customDose(2, Math.max(months(12), startAgeDays + months(2)), months(12), { vi: "MenQuadfi mũi 2", en: "MenQuadfi dose 2" }, { minIntervalDays: months(2) }),
+        ];
+      }
+
+      return [customDose(1, startAgeDays, months(12), { vi: "MenQuadfi một mũi", en: "MenQuadfi single dose" })];
+    }
+
+    if (firstProductId === "nimenrix") {
+      if (startAgeDays < months(6)) {
+        return [
+          customDose(1, startAgeDays, weeks(6), { vi: "Nimenrix mũi 1", en: "Nimenrix dose 1" }),
+          customDose(2, startAgeDays + months(2), months(3), { vi: "Nimenrix mũi 2", en: "Nimenrix dose 2" }, { minIntervalDays: months(2) }),
+          customDose(3, Math.max(months(12), startAgeDays + months(4)), months(12), { vi: "Nimenrix mũi 3", en: "Nimenrix dose 3" }, { minIntervalDays: months(2) }),
+        ];
+      }
+
+      if (startAgeDays < months(12)) {
+        return [
+          customDose(1, startAgeDays, months(6), { vi: "Nimenrix mũi 1", en: "Nimenrix dose 1" }),
+          customDose(2, Math.max(months(12), startAgeDays + months(2)), months(12), { vi: "Nimenrix mũi 2", en: "Nimenrix dose 2" }, { minIntervalDays: months(2) }),
+        ];
+      }
+
+      return [customDose(1, startAgeDays, months(12), { vi: "Nimenrix một mũi", en: "Nimenrix single dose" })];
+    }
+  }
+
   return group.doses;
 }
 
@@ -268,33 +462,40 @@ function validateDoses(
   records: VaccinationRecord[],
   group: ScheduleGroup,
   birthDate: Date,
+  checkDate: Date,
   gracePeriodDays: number,
 ) {
-  const plannedDoses = customRotaDoses(group, records);
-  const matched = recordsForGroup(records, group);
+  const plannedDoses = customDoses(group, records, birthDate, checkDate);
+  const matched = recordsForGroup(records, group).filter((entry) => {
+    const isVietnamBirthDoseZero = group.id === "hepbBirth" && plannedDoses.length === 1 && plannedDoses[0]?.dose === 0;
+    if (!isVietnamBirthDoseZero) return true;
+    return differenceInDays(entry.date, birthDate) <= (plannedDoses[0]?.maxAgeDays ?? days(28));
+  });
   const valid: ValidatedDose[] = [];
   const invalid: Array<ValidatedDose & { reason: string }> = [];
 
   for (const entry of matched) {
     const expectedDose = plannedDoses[Math.min(valid.length, plannedDoses.length - 1)];
-    const ageAtDose = differenceInDays(entry.date, birthDate);
-    const minAge = expectedDose?.minAgeDays ?? 0;
     const previousValid = valid.at(-1);
-    const minInterval = previousValid && expectedDose?.minIntervalDays ? expectedDose.minIntervalDays : 0;
-    const interval = previousValid ? differenceInDays(entry.date, previousValid.date) : Infinity;
     const allowedEarly = gracePeriodDays;
+    const minAgeDate = expectedDose ? addScheduleDays(birthDate, expectedDose.minAgeDays) : birthDate;
+    const earliestAgeDate = addDays(minAgeDate, -allowedEarly);
 
-    if (ageAtDose < minAge - allowedEarly) {
+    if (entry.date < earliestAgeDate) {
       invalid.push({ ...entry, reason: "minimum-age" });
       continue;
     }
 
-    if (interval < minInterval - allowedEarly) {
-      invalid.push({ ...entry, reason: "minimum-interval" });
-      continue;
+    if (previousValid && expectedDose?.minIntervalDays) {
+      const minIntervalDate = addScheduleDays(previousValid.date, expectedDose.minIntervalDays);
+      const earliestIntervalDate = addDays(minIntervalDate, -allowedEarly);
+      if (entry.date < earliestIntervalDate) {
+        invalid.push({ ...entry, reason: "minimum-interval" });
+        continue;
+      }
     }
 
-    if (expectedDose?.maxAgeDays && ageAtDose > expectedDose.maxAgeDays) {
+    if (expectedDose?.maxAgeDays && entry.date > addScheduleDays(birthDate, expectedDose.maxAgeDays)) {
       invalid.push({ ...entry, reason: "maximum-age" });
       continue;
     }
@@ -311,13 +512,12 @@ function nextDoseWindow(
   dose: ScheduleDose,
   previousDoseDate: Date | undefined,
 ) {
-  const recommendedDate = addDays(birthDate, dose.recommendedDays);
-  const minAgeDate = addDays(birthDate, dose.minAgeDays);
+  const recommendedDate = addScheduleDays(birthDate, dose.recommendedDays);
+  const minAgeDate = addScheduleDays(birthDate, dose.minAgeDays);
   const minIntervalDate =
-    previousDoseDate && dose.minIntervalDays ? addDays(previousDoseDate, dose.minIntervalDays) : minAgeDate;
+    previousDoseDate && dose.minIntervalDays ? addScheduleDays(previousDoseDate, dose.minIntervalDays) : minAgeDate;
   const earliestDate = minAgeDate > minIntervalDate ? minAgeDate : minIntervalDate;
-  const ageToday = differenceInDays(checkDate, birthDate);
-  const maximumReached = dose.maxAgeDays ? ageToday > dose.maxAgeDays : false;
+  const maximumReached = dose.maxAgeDays ? checkDate > addScheduleDays(birthDate, dose.maxAgeDays) : false;
 
   return { recommendedDate, earliestDate, maximumReached };
 }
@@ -344,7 +544,7 @@ export function assessVaccines(input: AssessmentInput): AssessmentResult | null 
   ];
 
   const items = profile.groups.map((group): DoseAssessment => {
-    const { valid, invalid, plannedDoses } = validateDoses(input.records, group, birth, profile.gracePeriodDays);
+    const { valid, invalid, plannedDoses } = validateDoses(input.records, group, birth, check, profile.gracePeriodDays);
     const nextDose = plannedDoses[valid.length];
     const mixedRotavirus = group.id === "rotavirus" && hasMixedRotavirusProducts(valid);
 
