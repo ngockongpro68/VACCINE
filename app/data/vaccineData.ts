@@ -1071,7 +1071,11 @@ const commonNotes = {
   },
 };
 
-const comboDose = (dose: number, recommendedDays: number): ScheduleDose => ({
+const comboDose = (
+  dose: number,
+  recommendedDays: number,
+  extras: Partial<Pick<ScheduleDose, "maxAgeDays">> = {},
+): ScheduleDose => ({
   dose,
   recommendedDays,
   minAgeDays: weeks(6),
@@ -1080,6 +1084,7 @@ const comboDose = (dose: number, recommendedDays: number): ScheduleDose => ({
     vi: `Mũi ${dose}`,
     en: `Dose ${dose}`,
   },
+  ...extras,
 });
 
 const pcvDose = (dose: number, recommendedDays: number): ScheduleDose => ({
@@ -1180,9 +1185,9 @@ export const countryProfiles: CountryProfile[] = [
         requiredAntigens: ["Hib", "HepB"],
         category: "routine",
         doses: [
-          comboDose(1, months(2)),
-          comboDose(2, months(3)),
-          comboDose(3, months(4)),
+          comboDose(1, months(2), { maxAgeDays: months(24) }),
+          comboDose(2, months(3), { maxAgeDays: months(24) }),
+          comboDose(3, months(4), { maxAgeDays: months(24) }),
           {
             dose: 4,
             recommendedDays: months(16),
@@ -1193,8 +1198,8 @@ export const countryProfiles: CountryProfile[] = [
           },
         ],
         note: {
-          vi: "Đối chiếu theo lịch 6 trong 1 tại Long Châu: thường 2, 3, 4 và 16 tháng; mũi 4 có thể hoàn thành sớm hơn nếu đã cách mũi 3 ít nhất 6 tháng và chưa quá 24 tháng tuổi.",
-          en: "Aligned to the common Vietnamese 6-in-1 schedule used by Long Chau: usually at 2, 3, 4, and 16 months; dose 4 may be completed earlier if it is at least 6 months after dose 3 and before 24 months of age.",
+          vi: "Thường 2, 3, 4 và 16 tháng. Các mũi 5 trong 1/6 trong 1 chỉ áp dụng trước 24 tháng; nếu trẻ đã quá 24 tháng và chưa đủ mũi, cần bác sĩ chọn lịch tiêm bù theo từng thành phần.",
+          en: "Commonly at 2, 3, 4, and 16 months. Five-in-one/six-in-one doses apply before 24 months; children older than 24 months with incomplete history need clinician-directed catch-up by component.",
         },
       },
       {
@@ -1315,8 +1320,8 @@ export const countryProfiles: CountryProfile[] = [
           },
         ],
         note: {
-          vi: "Theo lịch Long Châu: Bexsero dùng từ tròn 2 tháng đến tròn 50 tuổi. Có thể tiêm cùng vaccine khác khi đã giải thích lợi ích/nguy cơ; không cần khoảng cách với Mengoc BC và Menactra. Tiêm cùng ngày với Bexsero và phế cầu có thể tăng sốt, sưng đau.",
-          en: "Long Chau schedule: Bexsero is used from 2 months through 50 years. It may be given with other vaccines after benefit/risk discussion; no spacing is required with Mengoc BC or Menactra. Same-day Bexsero with pneumococcal vaccines may increase fever or local reactions.",
+          vi: "Bexsero dùng từ tròn 2 tháng đến tròn 50 tuổi. Có thể tiêm cùng vaccine khác khi đã giải thích lợi ích/nguy cơ; không cần khoảng cách với Mengoc BC và Menactra. Tiêm cùng ngày với Bexsero và phế cầu có thể tăng sốt, sưng đau.",
+          en: "Bexsero is used from 2 months through 50 years. It may be given with other vaccines after benefit/risk discussion; no spacing is required with Mengoc BC or Menactra. Same-day Bexsero with pneumococcal vaccines may increase fever or local reactions.",
         },
       },
       {
@@ -1342,8 +1347,8 @@ export const countryProfiles: CountryProfile[] = [
           },
         ],
         note: {
-          vi: "Theo lịch Long Châu: VA-Mengoc-BC dùng từ tròn 6 tháng đến trước sinh nhật 46 tuổi, 2 mũi cách 2 tháng; khoảng cách tối thiểu 42 ngày. Có thể tiêm cùng vaccine khác khi đã giải thích lợi ích/nguy cơ; không cần khoảng cách với Bexsero và Menactra, nhưng tiêm cùng ngày với Bexsero, Menactra và Prevenar 13 có thể tăng sốt, sưng đau.",
-          en: "Long Chau schedule: VA-Mengoc-BC is used from 6 months until before the 46th birthday, with 2 doses 2 months apart; minimum interval is 42 days. It may be given with other vaccines after benefit/risk discussion; no spacing is required with Bexsero and Menactra, though same-day Bexsero, Menactra, and Prevenar 13 may increase fever or local reactions.",
+          vi: "VA-Mengoc-BC dùng từ tròn 6 tháng đến trước sinh nhật 46 tuổi, 2 mũi cách 2 tháng; khoảng cách tối thiểu 42 ngày. Có thể tiêm cùng vaccine khác khi đã giải thích lợi ích/nguy cơ; không cần khoảng cách với Bexsero và Menactra, nhưng tiêm cùng ngày với Bexsero, Menactra và Prevenar 13 có thể tăng sốt, sưng đau.",
+          en: "VA-Mengoc-BC is used from 6 months until before the 46th birthday, with 2 doses 2 months apart; minimum interval is 42 days. It may be given with other vaccines after benefit/risk discussion; no spacing is required with Bexsero and Menactra, though same-day Bexsero, Menactra, and Prevenar 13 may increase fever or local reactions.",
         },
       },
       {
@@ -1401,8 +1406,33 @@ export const countryProfiles: CountryProfile[] = [
           },
         ],
         note: {
-          vi: "Theo lịch Long Châu: từ 6 tháng tuổi có thể tiêm cúm; trẻ dưới 9 tuổi lần đầu tiêm thường cần 2 mũi cách 1 tháng, sau đó nhắc hằng năm. Mốc nhắc hằng năm cần điểm tiêm đối chiếu theo mùa và lịch đã tiêm.",
-          en: "Long Chau schedule: influenza can start from 6 months; children under 9 years receiving influenza vaccine for the first time usually need 2 doses 1 month apart, then annual vaccination. Annual boosters should be checked by season and history.",
+          vi: "Từ 6 tháng tuổi có thể tiêm cúm; trẻ dưới 9 tuổi lần đầu tiêm thường cần 2 mũi cách 1 tháng, sau đó nhắc hằng năm. Mốc nhắc hằng năm cần điểm tiêm đối chiếu theo mùa và lịch đã tiêm.",
+          en: "Influenza vaccination can start from 6 months; children under 9 years receiving influenza vaccine for the first time usually need 2 doses 1 month apart, then annual vaccination. Annual boosters should be checked by season and history.",
+        },
+      },
+      {
+        id: "je",
+        name: { vi: "Viêm não Nhật Bản", en: "Japanese encephalitis" },
+        requiredAntigens: ["JE"],
+        category: "service",
+        doses: [
+          {
+            dose: 1,
+            recommendedDays: months(9),
+            minAgeDays: months(9),
+            label: { vi: "Viêm não Nhật Bản mũi 1", en: "Japanese encephalitis dose 1" },
+          },
+          {
+            dose: 2,
+            recommendedDays: months(21),
+            minAgeDays: months(21),
+            minIntervalDays: months(12),
+            label: { vi: "Viêm não Nhật Bản mũi 2", en: "Japanese encephalitis dose 2" },
+          },
+        ],
+        note: {
+          vi: "Imojev có thể bắt đầu từ tròn 9 tháng tuổi. Jevax/JEEV cần đối chiếu đúng sản phẩm và lịch tại điểm tiêm trước khi quy đổi.",
+          en: "Imojev can start from 9 months of age. Jevax/JEEV should be matched to the exact product schedule at the clinic before conversion.",
         },
       },
       {
@@ -1491,8 +1521,8 @@ export const countryProfiles: CountryProfile[] = [
           { dose: 2, recommendedDays: years(2) + weeks(2), minAgeDays: years(2), minIntervalDays: weeks(2), label: { vi: "Tả liều 2", en: "Cholera dose 2" } },
         ],
         note: {
-          vi: "mORCVAX dùng đường uống, 2 liều cách đúng 14 ngày theo lưu ý Long Châu; không áp dụng tiêm sớm 2 ngày cho mũi này.",
-          en: "mORCVAX is oral, 2 doses exactly 14 days apart per Long Chau notes; the 2-day early rule should not be applied here.",
+          vi: "mORCVAX dùng đường uống, 2 liều cách đúng 14 ngày; không áp dụng tiêm sớm 2 ngày cho mũi này.",
+          en: "mORCVAX is oral, 2 doses exactly 14 days apart; the 2-day early rule should not be applied here.",
         },
       },
       {

@@ -171,17 +171,32 @@ export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function ageLabel(ageDays: number, language: Language): string {
+function ageLabel(birthDate: Date, checkDate: Date, language: Language): string {
   const text = dictionary[language];
-  if (ageDays < 60) return `${ageDays} ${text.days}`;
-  if (ageDays < 730) {
-    const months = Math.floor(ageDays / 30.4375);
-    const days = Math.max(0, Math.round(ageDays - months * 30.4375));
-    return `${months} ${text.months}${days ? ` ${days} ${text.days}` : ""}`;
+  let yearsOld = checkDate.getFullYear() - birthDate.getFullYear();
+  let monthsOld = checkDate.getMonth() - birthDate.getMonth();
+  let daysOld = checkDate.getDate() - birthDate.getDate();
+
+  if (daysOld < 0) {
+    daysOld += new Date(checkDate.getFullYear(), checkDate.getMonth(), 0).getDate();
+    monthsOld -= 1;
   }
-  const years = Math.floor(ageDays / 365.25);
-  const months = Math.floor((ageDays - years * 365.25) / 30.4375);
-  return `${years} ${text.years}${months ? ` ${months} ${text.months}` : ""}`;
+
+  if (monthsOld < 0) {
+    monthsOld += 12;
+    yearsOld -= 1;
+  }
+
+  if (yearsOld <= 0 && monthsOld < 2) {
+    const ageDays = differenceInDays(checkDate, birthDate);
+    if (monthsOld <= 0) return `${ageDays} ${text.days}`;
+  }
+
+  if (yearsOld < 2) {
+    return `${monthsOld + yearsOld * 12} ${text.months}${daysOld ? ` ${daysOld} ${text.days}` : ""}`;
+  }
+
+  return `${yearsOld} ${text.years}${monthsOld ? ` ${monthsOld} ${text.months}` : ""}`;
 }
 
 function productCoversGroup(product: VaccineProduct, group: ScheduleGroup): boolean {
@@ -675,7 +690,7 @@ export function assessVaccines(input: AssessmentInput): AssessmentResult | null 
   );
 
   return {
-    ageLabel: ageLabel(ageDays, language),
+    ageLabel: ageLabel(birth, check, language),
     ageDays,
     profile,
     items,

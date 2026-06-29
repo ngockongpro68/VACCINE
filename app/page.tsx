@@ -189,15 +189,6 @@ const copy = {
   },
 };
 
-const statusClass: Record<DoseStatus, string> = {
-  due: "status status-due",
-  "catch-up": "status status-catchup",
-  upcoming: "status status-upcoming",
-  "not-eligible": "status status-ineligible",
-  completed: "status status-complete",
-  "doctor-review": "status status-doctor",
-};
-
 function statusLabel(status: DoseStatus, language: Language) {
   const t = copy[language];
   const labels: Record<DoseStatus, string> = {
@@ -209,11 +200,6 @@ function statusLabel(status: DoseStatus, language: Language) {
     "doctor-review": t.doctorReview,
   };
   return labels[status];
-}
-
-function categoryLabel(category: DoseAssessment["category"], language: Language) {
-  const t = copy[language];
-  return category === "routine" ? t.routine : category === "service" ? t.service : t.special;
 }
 
 const productTargets: Record<string, Record<Language, string>> = {
@@ -451,6 +437,7 @@ const hiddenProductIds = new Set([
   "epi-5in1",
   "measles-single",
   "menacwy",
+  "sii-mmr",
 ]);
 
 function isVisibleProduct(product: VaccineProduct) {
@@ -461,26 +448,121 @@ function isBirthDoseOnlyProduct(product: VaccineProduct) {
   return product.antigens.length === 1 && product.antigens[0] === "HepB";
 }
 
+const productMinimumAgeYears: Record<string, number> = {
+  "pneumovax-23": 2,
+};
+
+const productMinimumAgeMonths: Record<string, number> = {
+  imojev: 9,
+  jevax: 12,
+  jeev: 12,
+};
+
+const productMaximumAgeMonths: Record<string, number> = {
+  hexaxim: 24,
+  "infanrix-hexa": 24,
+  pentaxim: 24,
+  "epi-5in1": 24,
+  quinvaxem: 24,
+};
+
+const vietnamRoutineDisplayProductIds = new Set([
+  "ivac-bcg",
+  "hepb-birth-dose",
+  "mvvac",
+  "mrvac",
+  "imovax-polio",
+]);
+
+const groupedTodayLabels: Partial<Record<string, Record<Language, string>>> = {
+  pcv: { vi: "Phế cầu", en: "Pneumococcal" },
+  menACWY: { vi: "Não mô cầu ACWY", en: "Meningococcal ACWY" },
+  influenza: { vi: "Cúm mùa", en: "Seasonal influenza" },
+  hepa: { vi: "Viêm gan A", en: "Hepatitis A" },
+  hepab: { vi: "Viêm gan A+B", en: "Hepatitis A+B" },
+  varicella: { vi: "Thủy đậu", en: "Varicella" },
+  je: { vi: "Viêm não Nhật Bản", en: "Japanese encephalitis" },
+};
+
+function addCalendarMonths(date: Date, monthCount: number) {
+  const next = new Date(date);
+  next.setMonth(date.getMonth() + monthCount);
+  return next;
+}
+
+function isAllowedForCurrentAge(product: VaccineProduct, birthDateValue: string, checkDateValue: string) {
+  const minAgeYears = productMinimumAgeYears[product.id];
+  const minAgeMonths = productMinimumAgeMonths[product.id];
+  const maxAgeMonths = productMaximumAgeMonths[product.id];
+  if (minAgeYears === undefined && minAgeMonths === undefined && maxAgeMonths === undefined) return true;
+
+  const birthDate = parseLocalDate(birthDateValue);
+  const checkDate = parseLocalDate(checkDateValue);
+  if (!birthDate || !checkDate) return false;
+
+  if (minAgeYears !== undefined) {
+    const minAgeDate = new Date(birthDate);
+    minAgeDate.setFullYear(birthDate.getFullYear() + minAgeYears);
+    if (checkDate < minAgeDate) return false;
+  }
+
+  if (minAgeMonths !== undefined && checkDate < addCalendarMonths(birthDate, minAgeMonths)) {
+    return false;
+  }
+
+  if (maxAgeMonths !== undefined && checkDate >= addCalendarMonths(birthDate, maxAgeMonths)) {
+    return false;
+  }
+
+  return true;
+}
+
+function todayProductCategory(
+  product: VaccineProduct,
+  item: DoseAssessment,
+  country: CountryCode,
+): DoseAssessment["category"] {
+  if (country === "VN") {
+    if (item.category === "special") return "special";
+    return vietnamRoutineDisplayProductIds.has(product.id) ? "routine" : "service";
+  }
+
+  return item.category;
+}
+
+function isAtLeastAgeMonths(birthDateValue: string, checkDateValue: string, monthCount: number) {
+  const birthDate = parseLocalDate(birthDateValue);
+  const checkDate = parseLocalDate(checkDateValue);
+  return Boolean(birthDate && checkDate && checkDate >= addCalendarMonths(birthDate, monthCount));
+}
+
 function productsForAssessmentItem(
   item: DoseAssessment,
   country: CountryCode,
   language: Language,
+  birthDateValue: string,
+  checkDateValue: string,
 ) {
   return vaccineProducts
     .filter(
       (product) =>
         product.countries.includes(country) &&
         product.groupIds.includes(item.groupId as VaccineProduct["groupIds"][number]) &&
-        isVisibleProduct(product),
+        isVisibleProduct(product) &&
+        isAllowedForCurrentAge(product, birthDateValue, checkDateValue),
     )
     .filter((product) => {
-      if (item.groupId !== "hepbBirth") return true;
-      return isBirthDoseOnlyProduct(product);
+      if (item.groupId === "hepbBirth") return isBirthDoseOnlyProduct(product);
+      if (item.groupId === "polio") {
+        if (item.doseLabel.toLowerCase().includes("ipv")) return product.id === "imovax-polio";
+        if (item.doseLabel.toLowerCase().includes("bopv")) return product.id === "bopv-polyvac";
+      }
+      return true;
     })
     .map((product) => ({
       id: product.id,
       label: productOptionLabel(product, language),
-      category: item.category,
+      category: todayProductCategory(product, item, country),
     }));
 }
 
@@ -502,20 +584,6 @@ function visitQuestions(language: Language) {
     "Is there anything special to mention: animal bite, dirty wound, pregnancy, immune-suppressing medicine, or prior severe vaccine reaction?",
     "When is the next dose due, and is there a minimum interval that must not be shortened?",
   ];
-}
-
-function assessmentNote(item: DoseAssessment, country: CountryCode, language: Language) {
-  if (item.groupId !== "hepbBirth") return item.note;
-
-  if (language === "vi") {
-    return country === "US"
-      ? "Liều sơ sinh nên dùng vaccine viêm gan B đơn giá. Nếu mẹ dương tính HBsAg hoặc chưa rõ tình trạng, bé cần được tiêm rất sớm và có thể phải phối hợp HBIG theo hướng dẫn CDC."
-      : "Liều sơ sinh nên dùng vaccine viêm gan B đơn giá, ưu tiên trong 24 giờ đầu sau sinh. Nếu mẹ dương tính HBsAg hoặc chưa rõ tình trạng, bé cần được bác sĩ xử trí sớm và có thể phải phối hợp HBIG.";
-  }
-
-  return country === "US"
-    ? "The birth dose should use monovalent hepatitis B vaccine. If the mother is HBsAg-positive or status is unknown, the newborn needs urgent management and may also need HBIG under CDC guidance."
-    : "The birth dose should use monovalent hepatitis B vaccine, ideally within the first 24 hours after birth. If the mother is HBsAg-positive or status is unknown, urgent clinician-directed management and HBIG may be needed.";
 }
 
 type DiseaseCatalogItem = {
@@ -1211,6 +1279,17 @@ function defaultDate(daysAgo: number) {
   return toInputDate(date);
 }
 
+function sortVaccinationRecords(records: VaccinationRecord[]) {
+  return records
+    .map((record, index) => ({ record, index, date: parseLocalDate(record.date) }))
+    .sort((a, b) => {
+      const aTime = a.date ? a.date.getTime() : Number.MAX_SAFE_INTEGER;
+      const bTime = b.date ? b.date.getTime() : Number.MAX_SAFE_INTEGER;
+      return aTime === bTime ? a.index - b.index : aTime - bTime;
+    })
+    .map((entry) => entry.record);
+}
+
 export default function Home() {
   const [language, setLanguage] = useState<Language>("vi");
   const [tab, setTab] = useState<Tab>("checker");
@@ -1284,7 +1363,7 @@ export default function Home() {
   const compare = compareNotes(compareFrom, compareTo, language);
   const todayProducts = useMemo(() => {
     type TodayProduct = { id: string; label: string; category: DoseAssessment["category"] };
-    if (!result) {
+    if (!result || !submittedInput) {
       return {
         routine: [] as TodayProduct[],
         service: [] as TodayProduct[],
@@ -1295,22 +1374,67 @@ export default function Home() {
     const routineMap = new Map<string, TodayProduct>();
     const serviceMap = new Map<string, TodayProduct>();
     const reviewMap = new Map<string, TodayProduct>();
+    const putReview = (id: string, label: string) => {
+      reviewMap.set(id, { id, label, category: "special" });
+    };
+    const putServiceProductById = (productId: string) => {
+      const product = vaccineProducts.find(
+        (candidate) =>
+          candidate.id === productId &&
+          candidate.countries.includes(result.profile.code) &&
+          isVisibleProduct(candidate) &&
+          isAllowedForCurrentAge(candidate, submittedInput.birthDate, submittedInput.checkDate),
+      );
+      if (!product) return;
+      serviceMap.set(product.id, {
+        id: product.id,
+        label: productOptionLabel(product, language),
+        category: "service",
+      });
+    };
+    const putProduct = (product: TodayProduct) => {
+      if (product.category === "routine") {
+        routineMap.set(product.id, product);
+      } else if (product.category === "special") {
+        reviewMap.set(product.id, product);
+      } else {
+        serviceMap.set(product.id, product);
+      }
+    };
 
     result.items.forEach((item) => {
-      const matchedProducts = productsForAssessmentItem(item, result.profile.code, language);
+      const matchedProducts = productsForAssessmentItem(
+        item,
+        result.profile.code,
+        language,
+        submittedInput.birthDate,
+        submittedInput.checkDate,
+      );
       if (item.status === "due" || item.status === "catch-up") {
-        matchedProducts.forEach((product) => {
-          if (product.category === "routine") {
-            routineMap.set(product.id, product);
-          } else if (product.category === "special") {
-            reviewMap.set(product.id, product);
-          } else {
-            serviceMap.set(product.id, product);
-          }
-        });
+        const groupLabel = groupedTodayLabels[item.groupId]?.[language];
+        if (groupLabel && matchedProducts.length > 0) {
+          const firstCategory = matchedProducts[0]?.category ?? item.category;
+          putProduct({
+            id: item.groupId,
+            label: `${groupLabel}: ${matchedProducts.map((product) => product.label.split(" - ")[0]).join(", ")}`,
+            category: firstCategory,
+          });
+          return;
+        }
+        matchedProducts.forEach(putProduct);
       }
       if (item.status === "doctor-review") {
-        matchedProducts.forEach((product) => reviewMap.set(product.id, product));
+        if (item.groupId === "dtapIpvHibHepb") {
+          const over24Months = isAtLeastAgeMonths(submittedInput.birthDate, submittedInput.checkDate, 24);
+          if (over24Months) putServiceProductById("tetraxim");
+          putReview(
+            "dtap-catchup-over-24m",
+            language === "vi"
+              ? "Sau 24 tháng: Tetraxim có thể bù bạch hầu, ho gà, uốn ván, bại liệt; Hib và viêm gan B cần rà riêng."
+              : "After 24 months: Tetraxim may catch up diphtheria, pertussis, tetanus, and polio; Hib and hepatitis B need separate review.",
+          );
+          return;
+        }
       }
     });
 
@@ -1319,7 +1443,7 @@ export default function Home() {
       service: Array.from(serviceMap.values()),
       review: Array.from(reviewMap.values()),
     };
-  }, [language, result]);
+  }, [language, result, submittedInput]);
 
   function toggleHealth(id: string) {
     setHealthIds((current) => {
@@ -1330,18 +1454,22 @@ export default function Home() {
   }
 
   function updateRecord(id: string, patch: Partial<VaccinationRecord>) {
-    setRecords((current) => current.map((record) => (record.id === id ? { ...record, ...patch } : record)));
+    setRecords((current) =>
+      sortVaccinationRecords(current.map((record) => (record.id === id ? { ...record, ...patch } : record))),
+    );
   }
 
   function addRecord() {
-    setRecords((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        productId: "",
-        date: checkDate || todayIso,
-      },
-    ]);
+    setRecords((current) =>
+      sortVaccinationRecords([
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          productId: "",
+          date: checkDate || todayIso,
+        },
+      ]),
+    );
   }
 
   function removeRecord(id: string) {
@@ -1563,12 +1691,12 @@ export default function Home() {
                 <div className="today-products-head">
                   <div>
                     <span>{t.todayVaccinesTitle}</span>
-                    <strong>{todayProducts.routine.length + todayProducts.service.length}</strong>
+                    <strong>{todayProducts.routine.length + todayProducts.service.length + todayProducts.review.length}</strong>
                   </div>
                   <p>{t.todayVaccinesHint}</p>
                 </div>
 
-                {todayProducts.routine.length + todayProducts.service.length > 0 ? (
+                {todayProducts.routine.length + todayProducts.service.length + todayProducts.review.length > 0 ? (
                   <>
                     {todayProducts.routine.length > 0 && (
                       <div className="today-vaccine-section">
@@ -1595,6 +1723,18 @@ export default function Home() {
                         </div>
                       </div>
                     )}
+                    {todayProducts.review.length > 0 && (
+                      <div className="today-vaccine-section">
+                        <span>{t.todayVaccinesReview}</span>
+                        <div className="today-vaccine-list">
+                          {todayProducts.review.map((product) => (
+                            <div className="today-vaccine-item review" key={product.id}>
+                              {product.label}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <p className="note">{t.todayVaccinesEmpty}</p>
@@ -1614,42 +1754,6 @@ export default function Home() {
               </div>
             )}
 
-            {result && (
-              <div className="assessment-list">
-                {result.items.map((item) => (
-                <article className="assessment-item" key={`${item.groupId}-${item.doseLabel}`}>
-                  <div className="assessment-title">
-                    <div>
-                      <span className={statusClass[item.status]}>{statusLabel(item.status, language)}</span>
-                      <h3>{item.groupName}</h3>
-                    </div>
-                    <span className="category-tag">{categoryLabel(item.category, language)}</span>
-                  </div>
-                  <p className="dose-line">{item.doseLabel}</p>
-                  <p>{item.reason}</p>
-                  <dl>
-                    {item.recommendedDate && (
-                      <>
-                        <dt>{t.recommended}</dt>
-                        <dd>{item.recommendedDate}</dd>
-                      </>
-                    )}
-                    {item.earliestDate && (
-                      <>
-                        <dt>{t.earliest}</dt>
-                        <dd>{item.earliestDate}</dd>
-                      </>
-                    )}
-                    <dt>{t.validDoses}</dt>
-                    <dd>{item.validDoseCount}</dd>
-                    <dt>{t.invalidDoses}</dt>
-                    <dd>{item.invalidDoseCount}</dd>
-                  </dl>
-                  <p className="note">{assessmentNote(item, country, language)}</p>
-                </article>
-                ))}
-              </div>
-            )}
           </section>
         </section>
       )}
@@ -1759,8 +1863,6 @@ export default function Home() {
                   <dl>
                     <dt>{t.diseaseCoverage}</dt>
                     <dd>{product.coverage[language]}</dd>
-                    <dt>{t.diseaseNote}</dt>
-                    <dd>{product.note[language]}</dd>
                   </dl>
                 </article>
               ))}
